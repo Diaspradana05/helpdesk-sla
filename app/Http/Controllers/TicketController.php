@@ -2,8 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\TicketStatus;
+use App\Http\Requests\StoreTicketRequest;
+use App\Http\Requests\UpdateTicketRequest;
+use App\Models\Category;
+use App\Models\Priority;
 use App\Models\Ticket;
-use Illuminate\Http\Request;
+use App\Models\User;
 
 class TicketController extends Controller
 {
@@ -18,12 +23,34 @@ class TicketController extends Controller
 
     public function create()
     {
-        return view('tickets.create');
+        $categories = Category::all();
+        $priorities = Priority::all();
+        $customers = auth()->user()->hasAnyRole(['admin', 'agent'])
+            ? User::role('customer')->orderBy('name')->get()
+            : collect();
+
+        return view('tickets.create', compact('categories', 'priorities', 'customers'));
     }
 
-    public function store(Request $request)
+    public function store(StoreTicketRequest $request)
     {
-        // Logika lengkap (validasi, nomor otomatis, SLA) ditambahkan di Blok 2
+        $validated = $request->validated();
+        $priority = Priority::findOrFail($validated['priority_id']);
+        $now = now();
+
+        $ticket = Ticket::create([
+            'ticket_number' => $this->generateTicketNumber(),
+            'subject' => $validated['subject'],
+            'description' => $validated['description'],
+            'customer_id' => $validated['customer_id'] ?? auth()->id(),
+            'category_id' => $validated['category_id'],
+            'priority_id' => $validated['priority_id'],
+            'status' => TicketStatus::Open,
+            'first_response_due_at' => $now->copy()->addMinutes($priority->first_response_minutes),
+            'resolution_due_at' => $now->copy()->addMinutes($priority->resolution_minutes),
+        ]);
+
+        return redirect()->route('tickets.show', $ticket)->with('success', 'Tiket berhasil dibuat.');
     }
 
     public function show(Ticket $ticket)
@@ -35,12 +62,17 @@ class TicketController extends Controller
 
     public function edit(Ticket $ticket)
     {
-        return view('tickets.edit', compact('ticket'));
+        $categories = Category::all();
+        $priorities = Priority::all();
+
+        return view('tickets.edit', compact('ticket', 'categories', 'priorities'));
     }
 
-    public function update(Request $request, Ticket $ticket)
+    public function update(UpdateTicketRequest $request, Ticket $ticket)
     {
-        // Logika lengkap ditambahkan di Blok 2
+        $ticket->update($request->validated());
+
+        return redirect()->route('tickets.show', $ticket)->with('success', 'Tiket berhasil diperbarui.');
     }
 
     public function destroy(Ticket $ticket)
@@ -48,5 +80,14 @@ class TicketController extends Controller
         $ticket->delete();
 
         return redirect()->route('tickets.index')->with('success', 'Tiket berhasil dihapus.');
+    }
+
+    private function generateTicketNumber(): string
+    {
+        do {
+            $number = 'TKT-' . now()->format('Ymd') . '-' . str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT);
+        } while (Ticket::where('ticket_number', $number)->exists());
+
+        return $number;
     }
 }
