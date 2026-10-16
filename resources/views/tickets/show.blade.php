@@ -13,6 +13,33 @@
         {{ session('success') }}
     </div>
     @endif
+    @if (session('error'))
+    <div class="mb-4 p-4 bg-red-50 text-red-700 rounded">
+        {{ session('error') }}
+    </div>
+@endif
+
+@php
+    $nextStatuses = $ticket->status->allowedTransitions();
+@endphp
+
+@if (auth()->user()->hasAnyRole(['admin', 'agent']) && count($nextStatuses) > 0)
+    <div class="border-t pt-4 mt-4">
+        <p class="font-medium mb-2">Ubah Status</p>
+        <div class="flex gap-2">
+            @foreach ($nextStatuses as $status)
+                <form action="{{ route('tickets.updateStatus', $ticket) }}" method="POST">
+                    @csrf
+                    @method('PATCH')
+                    <input type="hidden" name="status" value="{{ $status->value }}">
+                    <button type="submit" class="px-3 py-1.5 bg-gray-800 text-white rounded hover:bg-gray-700 text-sm">
+                        → {{ $status->label() }}
+                    </button>
+                </form>
+            @endforeach
+        </div>
+    </div>
+@endif
                 <p><strong>Subjek:</strong> {{ $ticket->subject }}</p>
                 <p><strong>Deskripsi:</strong> {{ $ticket->description }}</p>
                 <p><strong>Customer:</strong> {{ $ticket->customer->name }}</p>

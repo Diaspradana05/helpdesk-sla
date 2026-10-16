@@ -9,6 +9,9 @@ use App\Models\Category;
 use App\Models\Priority;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Models\ActivityLog;
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class TicketController extends Controller
 {
@@ -90,4 +93,58 @@ class TicketController extends Controller
 
         return $number;
     }
+
+    
+public function updateStatus(Request $request, Ticket $ticket)
+{
+    $request->validate([
+        'status' => ['required', 'string'],
+    ]);
+
+    $newStatus = TicketStatus::from($request->status);
+
+    if (! $ticket->canTransitionTo($newStatus)) {
+        return back()->with(
+            'error',
+            "Status tidak bisa diubah dari {$ticket->status->label()} ke {$newStatus->label()}."
+        );
+    }
+
+    $oldStatus = $ticket->status;
+    $now = Carbon::now();
+
+    $ticket->status = $newStatus;
+
+    if (
+        $newStatus === TicketStatus::InProgress &&
+        is_null($ticket->first_responded_at)
+    ) {
+        $ticket->first_responded_at = $now;
+    }
+
+    if ($newStatus === TicketStatus::Resolved) {
+        $ticket->resolved_at = $now;
+    }
+
+    if ($newStatus === TicketStatus::Closed) {
+        $ticket->closed_at = $now;
+    }
+
+    $ticket->save();
+
+    ActivityLog::create([
+        'ticket_id' => $ticket->id,
+        'user_id' => auth()->id(),
+        'action' => 'status_changed',
+        'description' => "Status diubah dari {$oldStatus->label()} ke {$newStatus->label()}",
+        'properties' => [
+            'old' => $oldStatus->value,
+            'new' => $newStatus->value,
+        ],
+    ]);
+
+    return redirect()
+        ->route('tickets.show', $ticket)
+        ->with('success', 'Status tiket berhasil diperbarui.');
+}
 }

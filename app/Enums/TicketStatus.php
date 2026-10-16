@@ -28,4 +28,17 @@ enum TicketStatus: string
             self::Closed => 'gray',
         };
     }
+
+    /**
+     * Status mana saja yang boleh dituju dari status ini.
+     */
+    public function allowedTransitions(): array
+    {
+        return match ($this) {
+            self::Open => [self::InProgress],
+            self::InProgress => [self::Resolved],
+            self::Resolved => [self::Closed, self::InProgress],
+            self::Closed => [],
+        };
+    }
 }

@@ -62,4 +62,9 @@ class Ticket extends Model
     {
         return $this->hasMany(ActivityLog::class);
     }
+
+    public function canTransitionTo(TicketStatus $newStatus): bool
+{
+    return in_array($newStatus, $this->status->allowedTransitions(), true);
+}
 }
