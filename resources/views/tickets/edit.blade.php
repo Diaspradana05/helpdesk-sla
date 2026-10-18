@@ -19,25 +19,54 @@
                     </div>
                 @endif
 
-                <form method="POST" action="{{ route('tickets.update', $ticket) }}" class="space-y-4">
+                <form
+                    method="POST"
+                    action="{{ route('tickets.update', $ticket) }}"
+                    class="space-y-4"
+                    enctype="multipart/form-data"
+                >
                     @csrf
                     @method('PUT')
 
                     <div>
-                        <label class="block text-sm font-medium text-gray-700">Subjek</label>
-                        <input type="text" name="subject" value="{{ old('subject', $ticket->subject) }}" class="block w-full mt-1 border-gray-300 rounded">
+                        <label class="block text-sm font-medium text-gray-700">
+                            Subjek
+                        </label>
+                        <input
+                            type="text"
+                            name="subject"
+                            value="{{ old('subject', $ticket->subject) }}"
+                            class="block w-full mt-1 border-gray-300 rounded"
+                            required
+                        >
                     </div>
 
                     <div>
-                        <label class="block text-sm font-medium text-gray-700">Deskripsi</label>
-                        <textarea name="description" rows="4" class="block w-full mt-1 border-gray-300 rounded">{{ old('description', $ticket->description) }}</textarea>
+                        <label class="block text-sm font-medium text-gray-700">
+                            Deskripsi
+                        </label>
+                        <textarea
+                            name="description"
+                            rows="4"
+                            class="block w-full mt-1 border-gray-300 rounded"
+                            required
+                        >{{ old('description', $ticket->description) }}</textarea>
                     </div>
 
                     <div>
-                        <label class="block text-sm font-medium text-gray-700">Kategori</label>
-                        <select name="category_id" class="block w-full mt-1 border-gray-300 rounded">
+                        <label class="block text-sm font-medium text-gray-700">
+                            Kategori
+                        </label>
+                        <select
+                            name="category_id"
+                            class="block w-full mt-1 border-gray-300 rounded"
+                            required
+                        >
                             @foreach ($categories as $category)
-                                <option value="{{ $category->id }}" @selected(old('category_id', $ticket->category_id) == $category->id)>
+                                <option
+                                    value="{{ $category->id }}"
+                                    @selected(old('category_id', $ticket->category_id) == $category->id)
+                                >
                                     {{ $category->name }}
                                 </option>
                             @endforeach
@@ -45,19 +74,54 @@
                     </div>
 
                     <div>
-                        <label class="block text-sm font-medium text-gray-700">Prioritas</label>
-                        <select name="priority_id" class="block w-full mt-1 border-gray-300 rounded">
+                        <label class="block text-sm font-medium text-gray-700">
+                            Prioritas
+                        </label>
+                        <select
+                            name="priority_id"
+                            class="block w-full mt-1 border-gray-300 rounded"
+                            required
+                        >
                             @foreach ($priorities as $priority)
-                                <option value="{{ $priority->id }}" @selected(old('priority_id', $ticket->priority_id) == $priority->id)>
+                                <option
+                                    value="{{ $priority->id }}"
+                                    @selected(old('priority_id', $ticket->priority_id) == $priority->id)
+                                >
                                     {{ $priority->name }}
                                 </option>
                             @endforeach
                         </select>
                     </div>
 
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">
+                            Lampiran (opsional)
+                        </label>
+                        <input
+                            type="file"
+                            name="attachments[]"
+                            multiple
+                            accept=".pdf,.jpg,.jpeg,.png,.docx"
+                            class="block w-full mt-1 text-sm"
+                        >
+                        <p class="mt-1 text-xs text-gray-500">
+                            Format: PDF, JPG, JPEG, PNG, DOCX.
+                            Maksimal 5 MB per file.
+                        </p>
+                    </div>
+
                     <div class="flex justify-end gap-2">
-                        <a href="{{ route('tickets.show', $ticket) }}" class="px-4 py-2 border rounded">Batal</a>
-                        <button type="submit" class="px-4 py-2 text-white bg-gray-800 rounded hover:bg-gray-700">
+                        <a
+                            href="{{ route('tickets.show', $ticket) }}"
+                            class="px-4 py-2 border rounded hover:bg-gray-100"
+                        >
+                            Batal
+                        </a>
+
+                        <button
+                            type="submit"
+                            class="px-4 py-2 text-white bg-gray-800 rounded hover:bg-gray-700"
+                        >
                             Simpan Perubahan
                         </button>
                     </div>
