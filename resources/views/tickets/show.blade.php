@@ -151,42 +151,44 @@
                     $nextStatuses = $ticket->status->allowedTransitions();
                 @endphp
 
-                @if (auth()->user()->hasAnyRole(['admin', 'agent']) && count($nextStatuses) > 0)
-                    <div class="pt-5 border-t">
-                        <h3 class="mb-3 text-lg font-semibold text-gray-800">
-                            Ubah Status Tiket
-                        </h3>
+                @can('updateStatus', $ticket)
+                    @if (count($nextStatuses) > 0)
+                        <div class="pt-5 border-t">
+                            <h3 class="mb-3 text-lg font-semibold text-gray-800">
+                                Ubah Status Tiket
+                            </h3>
 
-                        <p class="mb-3 text-sm text-gray-500">
-                            Pilih status berikutnya sesuai proses penanganan tiket.
-                        </p>
+                            <p class="mb-3 text-sm text-gray-500">
+                                Pilih status berikutnya sesuai proses penanganan tiket.
+                            </p>
 
-                        <div class="flex flex-wrap gap-2">
-                            @foreach ($nextStatuses as $status)
-                                <form
-                                    action="{{ route('tickets.updateStatus', $ticket) }}"
-                                    method="POST"
-                                >
-                                    @csrf
-                                    @method('PATCH')
-
-                                    <input
-                                        type="hidden"
-                                        name="status"
-                                        value="{{ $status->value }}"
+                            <div class="flex flex-wrap gap-2">
+                                @foreach ($nextStatuses as $status)
+                                    <form
+                                        action="{{ route('tickets.updateStatus', $ticket) }}"
+                                        method="POST"
                                     >
+                                        @csrf
+                                        @method('PATCH')
 
-                                    <button
-                                        type="submit"
-                                        class="px-4 py-2 text-sm font-medium text-white bg-gray-800 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
-                                    >
-                                        Ubah ke {{ $status->label() }}
-                                    </button>
-                                </form>
-                            @endforeach
+                                        <input
+                                            type="hidden"
+                                            name="status"
+                                            value="{{ $status->value }}"
+                                        >
+
+                                        <button
+                                            type="submit"
+                                            class="px-4 py-2 text-sm font-medium text-white bg-gray-800 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                                        >
+                                            Ubah ke {{ $status->label() }}
+                                        </button>
+                                    </form>
+                                @endforeach
+                            </div>
                         </div>
-                    </div>
-                @endif
+                    @endif
+                @endcan
 
                 {{-- Navigasi --}}
                 <div class="flex flex-wrap items-center justify-between gap-3 pt-5 border-t">
@@ -197,12 +199,9 @@
                         &larr; Kembali ke Daftar Tiket
                     </a>
 
-                    <a
-                        href="{{ route('tickets.edit', $ticket) }}"
-                        class="px-4 py-2 text-sm font-medium text-white bg-amber-500 rounded-lg hover:bg-amber-600"
-                    >
-                        Edit Tiket
-                    </a>
+                    @can('update', $ticket)
+                    <a href="{{ route('tickets.edit', $ticket) }}" class="text-yellow-600 hover:underline">Edit Tiket</a>
+                    @endcan
                 </div>
 
             </div>

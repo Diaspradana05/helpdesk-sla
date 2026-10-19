@@ -34,15 +34,19 @@
                                 <td class="py-2">{{ $ticket->agent->name ?? '-' }}</td>
                                 <td class="py-2">{{ $ticket->priority->name }}</td>
                                 <td class="py-2">{{ $ticket->status->label() }}</td>
-                                <td class="py-2 space-x-2">
+                            <td class="py-2 space-x-2">
                                 <a href="{{ route('tickets.show', $ticket) }}" class="text-blue-600 hover:underline">Lihat</a>
+                                @can('update', $ticket)
                                 <a href="{{ route('tickets.edit', $ticket) }}" class="text-yellow-600 hover:underline">Edit</a>
+                                @endcan
+                                @can('delete', $ticket)
                                 <form action="{{ route('tickets.destroy', $ticket) }}" method="POST" class="inline"
                                 onsubmit="return confirm('Yakin ingin menghapus tiket ini?');">
                                 @csrf
                                 @method('DELETE')
                                 <button type="submit" class="text-red-600 hover:underline">Hapus</button>
                             </form>
+                            @endcan
                         </td>
                             </tr>
                         @empty

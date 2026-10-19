@@ -14,11 +14,20 @@ use App\Models\ActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
+
 class TicketController extends Controller
 {
     public function index()
     {
+        $user = auth()->user();
+
         $tickets = Ticket::with(['customer', 'agent', 'category', 'priority'])
+            ->when($user->hasRole('customer'), function ($query) use ($user) {
+                $query->where('customer_id', $user->id);
+            })
+            ->when($user->hasRole('agent'), function ($query) use ($user) {
+                $query->where('assigned_to', $user->id);
+            })
             ->latest()
             ->paginate(15);
 
@@ -27,6 +36,8 @@ class TicketController extends Controller
 
     public function create()
     {
+        $this->authorize('create', Ticket::class);
+
         $categories = Category::all();
         $priorities = Priority::all();
         $customers = auth()->user()->hasAnyRole(['admin', 'agent'])
@@ -37,30 +48,34 @@ class TicketController extends Controller
     }
 
     public function store(StoreTicketRequest $request)
-{
-    $validated = $request->validated();
-    $priority = Priority::findOrFail($validated['priority_id']);
-    $now = now();
+    {
+        $this->authorize('create', Ticket::class);
 
-    $ticket = Ticket::create([
-        'ticket_number' => $this->generateTicketNumber(),
-        'subject' => $validated['subject'],
-        'description' => $validated['description'],
-        'customer_id' => $validated['customer_id'] ?? auth()->id(),
-        'category_id' => $validated['category_id'],
-        'priority_id' => $validated['priority_id'],
-        'status' => TicketStatus::Open,
-        'first_response_due_at' => $now->copy()->addMinutes($priority->first_response_minutes),
-        'resolution_due_at' => $now->copy()->addMinutes($priority->resolution_minutes),
-    ]);
+        $validated = $request->validated();
+        $priority = Priority::findOrFail($validated['priority_id']);
+        $now = now();
 
-    $this->storeAttachments($request, $ticket);
+        $ticket = Ticket::create([
+            'ticket_number' => $this->generateTicketNumber(),
+            'subject' => $validated['subject'],
+            'description' => $validated['description'],
+            'customer_id' => $validated['customer_id'] ?? auth()->id(),
+            'category_id' => $validated['category_id'],
+            'priority_id' => $validated['priority_id'],
+            'status' => TicketStatus::Open,
+            'first_response_due_at' => $now->copy()->addMinutes($priority->first_response_minutes),
+            'resolution_due_at' => $now->copy()->addMinutes($priority->resolution_minutes),
+        ]);
 
-    return redirect()->route('tickets.show', $ticket)->with('success', 'Tiket berhasil dibuat.');
-}
+        $this->storeAttachments($request, $ticket);
+
+        return redirect()->route('tickets.show', $ticket)->with('success', 'Tiket berhasil dibuat.');
+    }
 
     public function show(Ticket $ticket)
     {
+        $this->authorize('view', $ticket);
+
         $ticket->load(['customer', 'agent', 'category', 'priority', 'comments.user', 'attachments']);
 
         return view('tickets.show', compact('ticket'));
@@ -68,6 +83,8 @@ class TicketController extends Controller
 
     public function edit(Ticket $ticket)
     {
+        $this->authorize('update', $ticket);
+
         $categories = Category::all();
         $priorities = Priority::all();
 
@@ -75,16 +92,20 @@ class TicketController extends Controller
     }
 
     public function update(UpdateTicketRequest $request, Ticket $ticket)
-{
-    $ticket->update($request->safe()->except('attachments'));
+    {
+        $this->authorize('update', $ticket);
 
-    $this->storeAttachments($request, $ticket);
+        $ticket->update($request->safe()->except('attachments'));
 
-    return redirect()->route('tickets.show', $ticket)->with('success', 'Tiket berhasil diperbarui.');
-}
+        $this->storeAttachments($request, $ticket);
+
+        return redirect()->route('tickets.show', $ticket)->with('success', 'Tiket berhasil diperbarui.');
+    }
 
     public function destroy(Ticket $ticket)
     {
+        $this->authorize('delete', $ticket);
+
         $ticket->delete();
 
         return redirect()->route('tickets.index')->with('success', 'Tiket berhasil dihapus.');
@@ -100,76 +121,77 @@ class TicketController extends Controller
     }
 
     private function storeAttachments(StoreTicketRequest|UpdateTicketRequest $request, Ticket $ticket): void
-{
-    if (! $request->hasFile('attachments')) {
-        return;
+    {
+        if (! $request->hasFile('attachments')) {
+            return;
+        }
+
+        foreach ($request->file('attachments') as $file) {
+            $path = $file->store('attachments', 'public');
+
+            TicketAttachment::create([
+                'ticket_id' => $ticket->id,
+                'uploaded_by' => auth()->id(),
+                'original_name' => $file->getClientOriginalName(),
+                'path' => $path,
+                'mime_type' => $file->getClientMimeType(),
+                'size' => $file->getSize(),
+            ]);
+        }
     }
 
-    foreach ($request->file('attachments') as $file) {
-        $path = $file->store('attachments', 'public');
+    public function updateStatus(Request $request, Ticket $ticket)
+    {
+        $this->authorize('updateStatus', $ticket);
 
-        TicketAttachment::create([
-            'ticket_id' => $ticket->id,
-            'uploaded_by' => auth()->id(),
-            'original_name' => $file->getClientOriginalName(),
-            'path' => $path,
-            'mime_type' => $file->getClientMimeType(),
-            'size' => $file->getSize(),
+        $request->validate([
+            'status' => ['required', 'string'],
         ]);
+
+        $newStatus = TicketStatus::from($request->status);
+
+        if (! $ticket->canTransitionTo($newStatus)) {
+            return back()->with(
+                'error',
+                "Status tidak bisa diubah dari {$ticket->status->label()} ke {$newStatus->label()}."
+            );
+        }
+
+        $oldStatus = $ticket->status;
+        $now = Carbon::now();
+
+        $ticket->status = $newStatus;
+
+        if (
+            $newStatus === TicketStatus::InProgress &&
+            is_null($ticket->first_responded_at)
+        ) {
+            $ticket->first_responded_at = $now;
+        }
+
+        if ($newStatus === TicketStatus::Resolved) {
+            $ticket->resolved_at = $now;
+        }
+
+        if ($newStatus === TicketStatus::Closed) {
+            $ticket->closed_at = $now;
+        }
+
+        $ticket->save();
+
+        ActivityLog::create([
+            'ticket_id' => $ticket->id,
+            'user_id' => auth()->id(),
+            'action' => 'status_changed',
+            'description' => "Status diubah dari {$oldStatus->label()} ke {$newStatus->label()}",
+            'properties' => [
+                'old' => $oldStatus->value,
+                'new' => $newStatus->value,
+            ],
+        ]);
+
+        return redirect()
+            ->route('tickets.show', $ticket)
+            ->with('success', 'Status tiket berhasil diperbarui.');
     }
-}
-
-    
-public function updateStatus(Request $request, Ticket $ticket)
-{
-    $request->validate([
-        'status' => ['required', 'string'],
-    ]);
-
-    $newStatus = TicketStatus::from($request->status);
-
-    if (! $ticket->canTransitionTo($newStatus)) {
-        return back()->with(
-            'error',
-            "Status tidak bisa diubah dari {$ticket->status->label()} ke {$newStatus->label()}."
-        );
-    }
-
-    $oldStatus = $ticket->status;
-    $now = Carbon::now();
-
-    $ticket->status = $newStatus;
-
-    if (
-        $newStatus === TicketStatus::InProgress &&
-        is_null($ticket->first_responded_at)
-    ) {
-        $ticket->first_responded_at = $now;
-    }
-
-    if ($newStatus === TicketStatus::Resolved) {
-        $ticket->resolved_at = $now;
-    }
-
-    if ($newStatus === TicketStatus::Closed) {
-        $ticket->closed_at = $now;
-    }
-
-    $ticket->save();
-
-    ActivityLog::create([
-        'ticket_id' => $ticket->id,
-        'user_id' => auth()->id(),
-        'action' => 'status_changed',
-        'description' => "Status diubah dari {$oldStatus->label()} ke {$newStatus->label()}",
-        'properties' => [
-            'old' => $oldStatus->value,
-            'new' => $newStatus->value,
-        ],
-    ]);
-
-    return redirect()
-        ->route('tickets.show', $ticket)
-        ->with('success', 'Status tiket berhasil diperbarui.');
-}
 }
